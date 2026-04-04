@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <title>ASTRO-NET：全时空运力数字孪生平台</title>
+    <style>
+        /* 全局重置 */
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #02050A; font-family: "Segoe UI", "Microsoft YaHei", sans-serif; }
+        #map-container { width: 100%; height: 100%; position: absolute; z-index: 1; }
+
+        /* 指挥舱 UI (左侧) */
+        .glass-panel {
+            position: absolute; top: 30px; left: 30px; width: 350px;
+            background: linear-gradient(145deg, rgba(8, 12, 25, 0.9) 0%, rgba(2, 5, 10, 0.8) 100%);
+            backdrop-filter: blur(20px); border: 1px solid rgba(0, 255, 255, 0.2); border-radius: 16px; color: #fff; padding: 25px; z-index: 10;
+        }
+
+        /* 视角控制面板 (右侧新增) */
+        .view-controls {
+            position: absolute; top: 30px; right: 30px; z-index: 10; display: flex; flex-direction: column; gap: 15px;
+        }
+        .view-btn {
+            background: rgba(10, 15, 30, 0.8); border: 1px solid rgba(0, 255, 255, 0.4); border-radius: 8px;
+            color: #00FFFF; padding: 12px 20px; cursor: pointer; backdrop-filter: blur(10px);
+            font-size: 14px; font-weight: bold; text-transform: uppercase; transition: all 0.3s;
+            display: flex; align-items: center; justify-content: center; min-width: 120px;
+        }
+        .view-btn:hover { background: rgba(0, 255, 255, 0.2); transform: translateX(-5px); box-shadow: 0 0 15px rgba(0, 255, 255, 0.3); }
+        .view-btn.active { background: #00FFFF; color: #000; box-shadow: 0 0 20px #00FFFF; }
+
+        /* 面板细节样式 */
+        .panel-title { font-size: 30px; font-weight: 900; color: #00FFFF; text-shadow: 0 0 20px rgba(0,255,255,0.8); margin-bottom: 5px; }
+        .data-box { background: rgba(0, 0, 0, 0.4); padding: 18px; border-radius: 10px; border-left: 4px solid; margin-bottom: 15px; }
+        .box-build { border-left-color: #0066FF; }
+        .box-rider { border-left-color: #FF6600; }
+        .box-drone { border-left-color: #00FFFF; }
+        .value { font-size: 30px; font-weight: bold; font-family: "Courier New", monospace; }
+
+        /* 底部时间轴 */
+        .timeline-container {
+            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); width: 65%;
+            background: rgba(8, 12, 25, 0.9); backdrop-filter: blur(15px);
+            border: 1px solid rgba(0, 255, 255, 0.2); border-radius: 50px;
+            padding: 15px 35px; display: flex; align-items: center; z-index: 10;
+        }
+        .play-btn { background: transparent; border: 2px solid #00FFFF; width: 44px; height: 44px; border-radius: 50%; cursor: pointer; display: flex; justify-content: center; align-items: center; margin-right: 25px; }
+        .pause-icon { width: 12px; height: 12px; background: #00FFFF; }
+        .play-icon { width: 0; height: 0; border-top: 8px solid transparent; border-bottom: 8px solid transparent; border-left: 12px solid #00FFFF; margin-left: 4px; }
+        .time-slider { flex-grow: 1; margin: 0 25px; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; }
+        .time-display { font-family: "Courier New", monospace; font-size: 22px; font-weight: bold; color: #00FFFF; min-width: 90px; text-align: right; }
+    </style>
+
+    <script src="https://unpkg.com/deck.gl@latest/dist.min.js"></script>
+    <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+</head>
+<body>
+
+<div id="map-container"></div>
+
+<div class="view-controls">
+    <div class="view-btn" onclick="switchView('global')">🪐 全局视角</div>
+    <div class="view-btn" onclick="switchView('macro')">🏙️ 宏观流向</div>
+    <div class="view-btn" onclick="switchView('micro')">🚁 避障细节</div>
+</div>
+
+<div class="glass-panel">
+    <div class="panel-title">ASTRO-NET</div>
+    <div style="font-size: 13px; color: #88BBDD; margin-bottom: 20px;">多维时空调度 · 智能避障推演</div>
+
+    <div class="data-box box-build">
+        <div style="font-size:12px; color:#AACCFF;">3D 城市地形避障基准</div>
+        <div class="value" id="ui-build-count">0</div>
+    </div>
+    <div class="data-box box-rider">
+        <div style="font-size:12px; color:#AACCFF;">地面骑手运力路径</div>
+        <div class="value" id="ui-rider-count">0</div>
+    </div>
+    <div class="data-box box-drone">
+        <div style="font-size:12px; color:#AACCFF;">无人机 3D 规划航线</div>
+        <div class="value" id="ui-drone-count">0</div>
+    </div>
+</div>
+
+<div class="timeline-container">
+    <button class="play-btn" id="play-pause-btn"><div class="pause-icon" id="play-icon"></div></button>
+    <div style="color:#88BBDD; font-size:14px; font-weight:bold;">START</div>
+    <input type="range" min="0" max="86400" value="0" class="time-slider" id="time-slider">
+    <div class="time-display" id="time-display">08:00</div>
+</div>
+
+<script>
+    // 1. 视角预设配置
+    const VIEWS = {
+        global: { longitude: 113.940, latitude: 22.538, zoom: 12.5, pitch: 0, bearing: 0, transitionDuration: 2000 },
+        macro: { longitude: 113.940, latitude: 22.538, zoom: 14.5, pitch: 45, bearing: -15, transitionDuration: 2000 },
+        micro: { longitude: 113.942, latitude: 22.541, zoom: 16.8, pitch: 70, bearing: 35, transitionDuration: 2000 }
+    };
+
+    // 2. 初始化渲染引擎
+    const deckgl = new deck.DeckGL({
+        container: 'map-container',
+        mapStyle: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+        initialViewState: VIEWS.macro,
+        controller: true,
+        layers: []
+    });
+
+    // 视角切换函数
+    function switchView(viewKey) {
+        deckgl.setProps({ initialViewState: { ...VIEWS[viewKey], transitionInterpolator: new deck.FlyToInterpolator(), transitionDuration: 2000 } });
+        document.querySelectorAll('.view-btn').forEach(btn => btn.classList.remove('active'));
+        event.target.classList.add('active');
+    }
+
+    // 3. 数据处理与渲染逻辑
+    let engineData = null;
+    let currentTime = 0;
+    let minTime = Infinity, maxTime = -Infinity;
+    const animationSpeed = 5;
+    let isPlaying = true;
+
+    async function fetchProjectData() {
+        try {
+            const response = await fetch('./project_data.json');
+            return await response.json();
+        } catch (e) { console.error("数据读取失败", e); return null; }
+    }
+
+    function updateLayers() {
+        if (!engineData) return;
+        const layers = [
+            // 1. 3D 建筑物白模层 (深邃冷峻风格，绝不抢戏)
+            new deck.PolygonLayer({
+                id: '3d-buildings',
+                data: engineData.buildings || [],
+                extruded: true, wireframe: true,
+                getPolygon: d => d.polygon, getElevation: d => d.height,
+                // 【配色重构】：深邃暗夜蓝填充，暗钢蓝色描边
+                getFillColor: [10, 15, 30, 220],
+                getLineColor: [30, 50, 80, 180],
+                lineWidthMinPixels: 1,
+                pickable: true
+            }),
+            // 2. 地面骑手轨迹 (岩浆暗流)
+            new deck.TripsLayer({
+                id: 'rider-trips',
+                data: engineData.riders || [],
+                getPath: d => d.path, getTimestamps: d => d.timestamps,
+                getColor: [255, 102, 0], opacity: 0.45, widthMinPixels: 2.5, trailLength: 200,
+                currentTime: currentTime
+            }),
+            // 3. 无人机轨迹 (高光主角，刺破夜空)
+            new deck.TripsLayer({
+                id: 'drone-trips',
+                data: engineData.drones || [],
+                getPath: d => d.path, getTimestamps: d => d.timestamps,
+                getColor: [0, 255, 255], opacity: 0.9, widthMinPixels: 4, trailLength: 400,
+                currentTime: currentTime
+            })
+        ];
+        deckgl.setProps({ layers });
+        document.getElementById('time-slider').value = currentTime;
+        document.getElementById('time-display').innerText = formatTime(currentTime);
+    }
+
+    function formatTime(val) {
+        const h = Math.floor(val / 3600) % 24;
+        const m = Math.floor((val % 3600) / 60);
+        return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+    }
+
+    function animate() {
+        if (isPlaying && engineData) {
+            currentTime += animationSpeed;
+            if (currentTime > maxTime) currentTime = minTime;
+            updateLayers();
+        }
+        requestAnimationFrame(animate);
+    }
+
+    async function bootSystem() {
+        engineData = await fetchProjectData();
+        if (!engineData) return;
+
+        // 自动解析时间边界
+        const process = (trips) => {
+            trips.forEach(t => t.timestamps.forEach(ts => {
+                if (ts < minTime) minTime = ts; if (ts > maxTime) maxTime = ts;
+            }));
+        };
+        process(engineData.riders || []);
+        process(engineData.drones || []);
+        currentTime = minTime;
+
+        // 绑定 UI
+        const slider = document.getElementById('time-slider');
+        slider.min = minTime; slider.max = maxTime;
+        document.getElementById('ui-build-count').innerText = (engineData.buildings || []).length;
+        document.getElementById('ui-rider-count').innerText = (engineData.riders || []).length;
+        document.getElementById('ui-drone-count').innerText = (engineData.drones || []).length;
+
+        slider.addEventListener('input', (e) => { currentTime = Number(e.target.value); updateLayers(); });
+        document.getElementById('play-pause-btn').onclick = () => {
+            isPlaying = !isPlaying;
+            document.getElementById('play-icon').className = isPlaying ? 'pause-icon' : 'play-icon';
+        };
+
+        animate();
+    }
+
+    bootSystem();
+</script>
+</body>
+</html>
