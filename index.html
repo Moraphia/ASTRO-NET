@@ -2,214 +2,628 @@
 <html lang="zh-CN">
 <head>
     <meta charset="utf-8">
-    <title>ASTRO-NET：全时空运力数字孪生平台</title>
+    <title>ASTRO-NET v2.5：全时空运力数字孪生平台</title>
     <style>
-        /* 全局重置 */
-        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #02050A; font-family: "Segoe UI", "Microsoft YaHei", sans-serif; }
+        /* ===== 全局重置 ===== */
+        html, body {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; background-color: #02050A;
+            font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+        }
         #map-container { width: 100%; height: 100%; position: absolute; z-index: 1; }
 
-        /* 指挥舱 UI (左侧) */
+        /* ===== 加载界面 ===== */
+        .loading-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 5, 15, 0.95); z-index: 10000; display: flex;
+            flex-direction: column; justify-content: center; align-items: center;
+            backdrop-filter: blur(10px);
+        }
+        .loading-spinner {
+            width: 50px; height: 50px; border: 5px solid rgba(0, 255, 255, 0.3);
+            border-radius: 50%; border-top-color: #00FFFF; animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .loading-text { color: #00FFFF; font-size: 18px; margin-top: 20px; }
+
+        /* ===== 指挥舱 UI (左侧) ===== */
         .glass-panel {
-            position: absolute; top: 30px; left: 30px; width: 350px;
-            background: linear-gradient(145deg, rgba(8, 12, 25, 0.9) 0%, rgba(2, 5, 10, 0.8) 100%);
-            backdrop-filter: blur(20px); border: 1px solid rgba(0, 255, 255, 0.2); border-radius: 16px; color: #fff; padding: 25px; z-index: 10;
+            position: absolute; top: 20px; left: 20px; width: 360px;
+            background: linear-gradient(145deg, rgba(8, 12, 25, 0.95) 0%, rgba(2, 5, 10, 0.9) 100%);
+            backdrop-filter: blur(20px); border: 1px solid rgba(0, 255, 255, 0.25);
+            border-radius: 16px; color: #fff; padding: 20px; z-index: 100;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
         }
-
-        /* 视角控制面板 (右侧新增) */
-        .view-controls {
-            position: absolute; top: 30px; right: 30px; z-index: 10; display: flex; flex-direction: column; gap: 15px;
-        }
-        .view-btn {
-            background: rgba(10, 15, 30, 0.8); border: 1px solid rgba(0, 255, 255, 0.4); border-radius: 8px;
-            color: #00FFFF; padding: 12px 20px; cursor: pointer; backdrop-filter: blur(10px);
-            font-size: 14px; font-weight: bold; text-transform: uppercase; transition: all 0.3s;
-            display: flex; align-items: center; justify-content: center; min-width: 120px;
-        }
-        .view-btn:hover { background: rgba(0, 255, 255, 0.2); transform: translateX(-5px); box-shadow: 0 0 15px rgba(0, 255, 255, 0.3); }
-        .view-btn.active { background: #00FFFF; color: #000; box-shadow: 0 0 20px #00FFFF; }
-
-        /* 面板细节样式 */
-        .panel-title { font-size: 30px; font-weight: 900; color: #00FFFF; text-shadow: 0 0 20px rgba(0,255,255,0.8); margin-bottom: 5px; }
-        .data-box { background: rgba(0, 0, 0, 0.4); padding: 18px; border-radius: 10px; border-left: 4px solid; margin-bottom: 15px; }
+        .data-box { background: rgba(0, 0, 0, 0.4); padding: 15px; border-radius: 10px; border-left: 4px solid; margin-bottom: 12px; }
         .box-build { border-left-color: #0066FF; }
         .box-rider { border-left-color: #FF6600; }
         .box-drone { border-left-color: #00FFFF; }
-        .value { font-size: 30px; font-weight: bold; font-family: "Courier New", monospace; }
+        .value { font-size: 28px; font-weight: bold; font-family: "Courier New", monospace; text-shadow: 0 0 10px currentColor; }
+        .panel-title { font-size: 28px; font-weight: 900; color: #00FFFF; text-shadow: 0 0 20px rgba(0,255,255,0.8); margin-bottom: 5px; }
 
-        /* 底部时间轴 */
-        .timeline-container {
-            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); width: 65%;
-            background: rgba(8, 12, 25, 0.9); backdrop-filter: blur(15px);
-            border: 1px solid rgba(0, 255, 255, 0.2); border-radius: 50px;
-            padding: 15px 35px; display: flex; align-items: center; z-index: 10;
+        /* ===== 实时统计仪表盘 ===== */
+        .stats-dashboard { margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(0, 255, 255, 0.2); }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .stat-card { background: rgba(0, 20, 40, 0.6); border-radius: 8px; padding: 10px; border-left: 3px solid; position: relative; overflow: hidden; }
+        .stat-card:nth-child(1) { border-left-color: #FF9900; }
+        .stat-card:nth-child(2) { border-left-color: #00CCFF; }
+        .stat-card:nth-child(3) { border-left-color: #FF3366; }
+        .stat-card:nth-child(4) { border-left-color: #33CC33; }
+        .stat-label { font-size: 10px; color: #AACCFF; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+        .stat-value { font-size: 18px; font-weight: 800; font-family: "Courier New", monospace; color: #FFFFFF; text-shadow: 0 0 8px currentColor; }
+        .stat-unit { font-size: 9px; color: #88BBDD; margin-left: 2px; }
+
+        /* ===== 视角控制面板 (右侧) ===== */
+        .view-controls { position: absolute; top: 20px; right: 20px; z-index: 100; display: flex; flex-direction: column; gap: 10px; }
+        .view-btn {
+            background: rgba(10, 15, 30, 0.85); border: 1px solid rgba(0, 255, 255, 0.4); border-radius: 8px;
+            color: #00FFFF; padding: 10px 16px; cursor: pointer; backdrop-filter: blur(10px); font-size: 12px;
+            font-weight: bold; text-transform: uppercase; transition: all 0.3s; display: flex; align-items: center; justify-content: center;
+            min-width: 120px; position: relative; overflow: hidden;
         }
-        .play-btn { background: transparent; border: 2px solid #00FFFF; width: 44px; height: 44px; border-radius: 50%; cursor: pointer; display: flex; justify-content: center; align-items: center; margin-right: 25px; }
+        .view-btn:hover { background: rgba(0, 255, 255, 0.2); transform: translateX(-3px); box-shadow: 0 0 15px rgba(0, 255, 255, 0.4); }
+        .view-btn.active { background: #00FFFF; color: #000; box-shadow: 0 0 20px #00FFFF; }
+        .view-btn .badge { position: absolute; top: -5px; right: -5px; background: #FF3366; color: white; font-size: 9px; padding: 2px 6px; border-radius: 10px; }
+
+        /* ===== 图层控制面板 ===== */
+        .layer-controls {
+            position: absolute; bottom: 120px; right: 20px; z-index: 100;
+            background: rgba(8, 12, 25, 0.9); backdrop-filter: blur(15px);
+            border: 1px solid rgba(0, 255, 255, 0.2); border-radius: 12px; padding: 15px; min-width: 200px;
+        }
+        .layer-title { color: #00FFFF; font-size: 14px; font-weight: bold; margin-bottom: 10px; text-align: center; }
+        .layer-option { display: flex; align-items: center; margin: 8px 0; cursor: pointer; }
+        .layer-checkbox { width: 16px; height: 16px; border: 2px solid #00FFFF; border-radius: 3px; margin-right: 10px; position: relative; }
+        .layer-checkbox.checked:after { content: "✓"; position: absolute; color: #00FFFF; font-size: 12px; top: -1px; left: 1px; }
+        .layer-label { color: #CCDDFF; font-size: 13px; flex-grow: 1; }
+        .layer-slider { width: 100%; margin: 5px 0 10px; accent-color: #00FFFF; }
+
+        /* ===== FPV 对比模式覆盖层 ===== */
+        .fpv-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0, 5, 15, 0.95); z-index: 1000; display: none; backdrop-filter: blur(5px);
+        }
+        .fpv-container { display: flex; width: 100%; height: 100%; padding: 20px; box-sizing: border-box; gap: 10px; }
+        .fpv-viewport { flex: 1; border-radius: 12px; overflow: hidden; position: relative; border: 2px solid rgba(255, 255, 255, 0.1); box-shadow: 0 0 30px rgba(0, 0, 0, 0.7); }
+        .fpv-label {
+            position: absolute; top: 10px; left: 10px; z-index: 101;
+            background: rgba(0, 0, 0, 0.7); color: white; padding: 6px 12px;
+            border-radius: 20px; font-size: 12px; font-weight: bold; border-left: 4px solid; backdrop-filter: blur(5px);
+        }
+        .rider-label { border-left-color: #FF6600; }
+        .drone-label { border-left-color: #00FFFF; }
+        .fpv-close {
+            position: absolute; top: 15px; right: 15px; z-index: 101;
+            background: rgba(255, 50, 50, 0.9); color: white; border: none;
+            width: 36px; height: 36px; border-radius: 50%; cursor: pointer; font-size: 18px; font-weight: bold;
+        }
+
+        /* ===== 底部时间轴 ===== */
+        .timeline-container {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 80%;
+            background: rgba(8, 12, 25, 0.92); backdrop-filter: blur(20px);
+            border: 1px solid rgba(0, 255, 255, 0.25); border-radius: 50px;
+            padding: 12px 30px; display: flex; align-items: center; z-index: 100; box-shadow: 0 5px 25px rgba(0, 0, 0, 0.5);
+        }
+        .play-btn {
+            background: transparent; border: 2px solid #00FFFF; width: 40px; height: 40px;
+            border-radius: 50%; cursor: pointer; display: flex; justify-content: center; align-items: center; margin-right: 15px;
+        }
         .pause-icon { width: 12px; height: 12px; background: #00FFFF; }
         .play-icon { width: 0; height: 0; border-top: 8px solid transparent; border-bottom: 8px solid transparent; border-left: 12px solid #00FFFF; margin-left: 4px; }
-        .time-slider { flex-grow: 1; margin: 0 25px; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; }
-        .time-display { font-family: "Courier New", monospace; font-size: 22px; font-weight: bold; color: #00FFFF; min-width: 90px; text-align: right; }
+        .time-display { font-family: "Courier New", monospace; font-size: 18px; color: #00FFFF; min-width: 80px; text-align: center; margin: 0 15px;}
+        .time-slider { flex-grow: 1; accent-color: #00FFFF; cursor: pointer; }
+
+        .speed-controls { display: flex; align-items: center; margin-left: 15px; }
+        .speed-btn {
+            background: transparent; border: 1px solid rgba(0,255,255,0.4); color: #88BBDD;
+            border-radius: 4px; padding: 4px 8px; margin: 0 3px; cursor: pointer; font-size: 11px;
+        }
+        .speed-btn.active { background: #00FFFF; color: #000; font-weight: bold; }
+
+        * { box-sizing: border-box; }
     </style>
 
-    <script src="https://unpkg.com/deck.gl@latest/dist.min.js"></script>
+    <script src="https://unpkg.com/deck.gl@8.9.0/dist.min.js"></script>
     <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
     <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
 </head>
 <body>
 
+<div class="loading-overlay" id="loading-overlay">
+    <div class="loading-spinner"></div>
+    <div class="loading-text" id="loading-text">🚀 启动数字孪生引擎...</div>
+</div>
+
 <div id="map-container"></div>
 
+<div class="fpv-overlay" id="fpv-overlay">
+    <button class="fpv-close" onclick="exitFpvMode()">×</button>
+    <div style="position:absolute;top:20px;left:50%;transform:translateX(-50%);color:#00FFFF;z-index:101; font-size: 14px; font-weight: bold; background: rgba(0,0,0,0.5); padding: 5px 15px; border-radius: 20px; border: 1px solid #00FFFF;">
+        双端同步比对：同订单全景效能分析
+    </div>
+    <div class="fpv-container">
+        <div class="fpv-viewport" id="rider-viewport">
+            <div class="fpv-label rider-label" id="rider-status">🚴 骑手地面视角</div>
+        </div>
+        <div class="fpv-viewport" id="drone-viewport">
+            <div class="fpv-label drone-label" id="drone-status">🚁 无人机飞行视角</div>
+        </div>
+    </div>
+</div>
+
 <div class="view-controls">
-    <div class="view-btn" onclick="switchView('global')">🪐 全局视角</div>
-    <div class="view-btn" onclick="switchView('macro')">🏙️ 宏观流向</div>
-    <div class="view-btn" onclick="switchView('micro')">🚁 避障细节</div>
+    <div class="view-btn" id="btn-global" onclick="switchView('global')">🪐 全局视角</div>
+    <div class="view-btn active" id="btn-macro" onclick="switchView('macro')">🏙️ 宏观流向</div>
+    <div class="view-btn" id="btn-micro" onclick="switchView('micro')">🚁 避障细节</div>
+    <div class="view-btn fpv-btn" id="btn-fpv" onclick="enterFpvMode()">👁️ 同订单对比 <span class="badge">NEW</span></div>
+</div>
+
+<div class="layer-controls">
+    <div class="layer-title">📊 数据图层控制</div>
+    <div class="layer-option" onclick="toggleLayer('heatmap')">
+        <div class="layer-checkbox checked" id="heatmap-checkbox"></div>
+        <div class="layer-label">时空热力图</div>
+    </div>
+    <input type="range" min="0" max="100" value="40" class="layer-slider" id="heatmap-opacity" oninput="updateHeatmapOpacity(this.value)">
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:#88BBDD;margin-top:5px;">
+        <span>透明</span><span id="heatmap-value">40%</span><span>不透明</span>
+    </div>
+
+    <div class="layer-option" onclick="toggleLayer('od')">
+        <div class="layer-checkbox checked" id="od-checkbox"></div>
+        <div class="layer-label">3D OD流量图</div>
+    </div>
+    <input type="range" min="1" max="50" value="20" class="layer-slider" id="od-threshold" oninput="updateODThreshold(this.value)">
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:#88BBDD;margin-top:5px;">
+        <span>低流量</span><span id="od-value">≥20单</span><span>高流量</span>
+    </div>
+
+    <div class="layer-option" onclick="toggleLayer('buildings')">
+        <div class="layer-checkbox checked" id="buildings-checkbox"></div>
+        <div class="layer-label">3D建筑模型</div>
+    </div>
 </div>
 
 <div class="glass-panel">
-    <div class="panel-title">ASTRO-NET</div>
-    <div style="font-size: 13px; color: #88BBDD; margin-bottom: 20px;">多维时空调度 · 智能避障推演</div>
+    <div class="panel-title">ASTRO-NET v2.5</div>
+    <div style="font-size: 13px; color: #88BBDD; margin-bottom: 20px;">全时空运力数字孪生 · 智能调度推演平台</div>
+    <div class="data-box box-build"><div style="font-size:12px; color:#AACCFF;">3D 城市地形避障基准</div><div class="value" id="ui-build-count">0</div></div>
+    <div class="data-box box-rider"><div style="font-size:12px; color:#AACCFF;">地面骑手运力路径</div><div class="value" id="ui-rider-count">0</div></div>
+    <div class="data-box box-drone"><div style="font-size:12px; color:#AACCFF;">无人机 3D 规划航线</div><div class="value" id="ui-drone-count">0</div></div>
 
-    <div class="data-box box-build">
-        <div style="font-size:12px; color:#AACCFF;">3D 城市地形避障基准</div>
-        <div class="value" id="ui-build-count">0</div>
-    </div>
-    <div class="data-box box-rider">
-        <div style="font-size:12px; color:#AACCFF;">地面骑手运力路径</div>
-        <div class="value" id="ui-rider-count">0</div>
-    </div>
-    <div class="data-box box-drone">
-        <div style="font-size:12px; color:#AACCFF;">无人机 3D 规划航线</div>
-        <div class="value" id="ui-drone-count">0</div>
+    <div class="stats-dashboard">
+        <div style="font-size:14px; color:#00FFFF; font-weight:bold; margin-bottom:10px; display: flex; justify-content: space-between; align-items: center;">
+            <span>📈 实时运力态势</span>
+            <div id="time-stamp" style="font-size: 12px; color: #88BBDD; background: rgba(0,0,0,0.3); padding: 4px 8px; border-radius: 4px;">08:00:00</div>
+        </div>
+        <div class="stats-grid">
+            <div class="stat-card"><div class="stat-label">在途运力</div><div class="stat-value" id="stat-active">0</div><span class="stat-unit">单</span></div>
+            <div class="stat-card"><div class="stat-label">时间节省</div><div class="stat-value" id="stat-timesave">0.0</div><span class="stat-unit">小时</span></div>
+            <div class="stat-card"><div class="stat-label">运力饱和度</div><div class="stat-value" id="stat-saturation">0%</div></div>
+            <div class="stat-card"><div class="stat-label">平均速度</div><div class="stat-value" id="stat-avgspeed">0</div><span class="stat-unit">km/h</span></div>
+        </div>
     </div>
 </div>
 
 <div class="timeline-container">
     <button class="play-btn" id="play-pause-btn"><div class="pause-icon" id="play-icon"></div></button>
-    <div style="color:#88BBDD; font-size:14px; font-weight:bold;">START</div>
     <input type="range" min="0" max="86400" value="0" class="time-slider" id="time-slider">
-    <div class="time-display" id="time-display">08:00</div>
+    <div class="time-display" id="time-display">08:00:00</div>
+    <div class="speed-controls">
+        <div style="color:#88BBDD;font-size:12px;margin-right:8px;">流速:</div>
+        <button class="speed-btn" onclick="setSpeed(1)">1x</button>
+        <button class="speed-btn active" onclick="setSpeed(5)">5x</button>
+        <button class="speed-btn" onclick="setSpeed(10)">10x</button>
+        <button class="speed-btn" onclick="setSpeed(20)">20x</button>
+    </div>
 </div>
 
 <script>
-    // 1. 视角预设配置
-    const VIEWS = {
-        global: { longitude: 113.940, latitude: 22.538, zoom: 12.5, pitch: 0, bearing: 0, transitionDuration: 2000 },
-        macro: { longitude: 113.940, latitude: 22.538, zoom: 14.5, pitch: 45, bearing: -15, transitionDuration: 2000 },
-        micro: { longitude: 113.942, latitude: 22.541, zoom: 16.8, pitch: 70, bearing: 35, transitionDuration: 2000 }
-    };
+// ====================================================================
+// 全局状态管理
+// ====================================================================
+let deckgl = null;
+let engineData = null;
+let currentTime = 28800;
+let minTime = Infinity;
+let maxTime = -Infinity;
+let animationSpeed = 5;
+let isPlaying = true;
+let isFpvMode = false;
+let activeLayers = { heatmap: true, od: true, buildings: true };
+let heatmapOpacity = 0.4;
+let odThreshold = 20;
 
-    // 2. 初始化渲染引擎
-    const deckgl = new deck.DeckGL({
-        container: 'map-container',
-        mapStyle: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
-        initialViewState: VIEWS.macro,
-        controller: true,
-        layers: []
-    });
+// 严格遵守用户的暗色 Mapbox 底图配置
+const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 
-    // 视角切换函数
-    function switchView(viewKey) {
-        deckgl.setProps({ initialViewState: { ...VIEWS[viewKey], transitionInterpolator: new deck.FlyToInterpolator(), transitionDuration: 2000 } });
-        document.querySelectorAll('.view-btn').forEach(btn => btn.classList.remove('active'));
-        event.target.classList.add('active');
-    }
+const VIEWS = {
+    global: { longitude: 113.940, latitude: 22.538, zoom: 12.5, pitch: 0, bearing: 0 },
+    macro: { longitude: 113.940, latitude: 22.538, zoom: 14.5, pitch: 45, bearing: -15 },
+    micro: { longitude: 113.942, latitude: 22.541, zoom: 16.8, pitch: 70, bearing: 35 }
+};
 
-    // 3. 数据处理与渲染逻辑
-    let engineData = null;
-    let currentTime = 0;
-    let minTime = Infinity, maxTime = -Infinity;
-    const animationSpeed = 5;
-    let isPlaying = true;
+let currentViewState = { ...VIEWS.macro };
 
-    async function fetchProjectData() {
-        try {
-            const response = await fetch('./project_data.json');
-            return await response.json();
-        } catch (e) { console.error("数据读取失败", e); return null; }
-    }
+// FPV 状态 (双独立实例渲染)
+let riderDeck = null;
+let droneDeck = null;
+let currentFpvIndex = 0; // 同一订单的全局锁定索引
+let lastRiderBearing = 0;
+let lastDroneBearing = 0;
 
-    function updateLayers() {
-        if (!engineData) return;
-        const layers = [
-            // 1. 3D 建筑物白模层 (深邃冷峻风格，绝不抢戏)
-            new deck.PolygonLayer({
-                id: '3d-buildings',
-                data: engineData.buildings || [],
-                extruded: true, wireframe: true,
-                getPolygon: d => d.polygon, getElevation: d => d.height,
-                // 【配色重构】：深邃暗夜蓝填充，暗钢蓝色描边
-                getFillColor: [10, 15, 30, 220],
-                getLineColor: [30, 50, 80, 180],
-                lineWidthMinPixels: 1,
-                pickable: true
-            }),
-            // 2. 地面骑手轨迹 (岩浆暗流)
-            new deck.TripsLayer({
-                id: 'rider-trips',
-                data: engineData.riders || [],
-                getPath: d => d.path, getTimestamps: d => d.timestamps,
-                getColor: [255, 102, 0], opacity: 0.45, widthMinPixels: 2.5, trailLength: 200,
-                currentTime: currentTime
-            }),
-            // 3. 无人机轨迹 (高光主角，刺破夜空)
-            new deck.TripsLayer({
-                id: 'drone-trips',
-                data: engineData.drones || [],
-                getPath: d => d.path, getTimestamps: d => d.timestamps,
-                getColor: [0, 255, 255], opacity: 0.9, widthMinPixels: 4, trailLength: 400,
-                currentTime: currentTime
-            })
-        ];
-        deckgl.setProps({ layers });
-        document.getElementById('time-slider').value = currentTime;
-        document.getElementById('time-display').innerText = formatTime(currentTime);
-    }
+// ====================================================================
+// 核心工具函数
+// ====================================================================
+function formatTime(seconds) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
 
-    function formatTime(val) {
-        const h = Math.floor(val / 3600) % 24;
-        const m = Math.floor((val % 3600) / 60);
-        return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-    }
+function getEntityCurrentHeadPosition(path, timestamps, now) {
+    if (!path || !timestamps || path.length < 2) return null;
+    if (now <= timestamps[0]) return path[0];
+    if (now >= timestamps[timestamps.length - 1]) return path[path.length - 1]; // 已送达，返回终点
 
-    function animate() {
-        if (isPlaying && engineData) {
-            currentTime += animationSpeed;
-            if (currentTime > maxTime) currentTime = minTime;
-            updateLayers();
+    for (let i = 0; i < timestamps.length - 1; i++) {
+        if (now >= timestamps[i] && now <= timestamps[i + 1]) {
+            const t = (now - timestamps[i]) / (timestamps[i + 1] - timestamps[i]);
+            return [
+                path[i][0] + (path[i + 1][0] - path[i][0]) * t,
+                path[i][1] + (path[i + 1][1] - path[i][1]) * t,
+                (path[i][2] || 0) + ((path[i + 1][2] || 0) - (path[i][2] || 0)) * t
+            ];
         }
-        requestAnimationFrame(animate);
+    }
+    return path[path.length - 1];
+}
+
+function calculateBearing(lon1, lat1, lon2, lat2) {
+    const rad = Math.PI / 180;
+    const y = Math.sin((lon2 - lon1) * rad) * Math.cos(lat2 * rad);
+    const x = Math.cos(lat1 * rad) * Math.sin(lat2 * rad) -
+              Math.sin(lat1 * rad) * Math.cos(lat2 * rad) * Math.cos((lon2 - lon1) * rad);
+    let brng = Math.atan2(y, x) * 180 / Math.PI;
+    return (brng + 360) % 360;
+}
+
+// 寻找当前活跃订单（完美逻辑：无人机先飞，等骑手）
+function getActiveOrderIndex(now, currentIdx) {
+    if (!engineData || !engineData.riders || !engineData.drones) return null;
+
+    // 1. 如果当前已经锁定了一个订单，且【骑手】还没到达终点，继续死死锁定这个订单！
+    // 这保证了无人机到了终点也会一直等，直到骑手送达。
+    if (currentIdx !== null && currentIdx < engineData.riders.length) {
+        const r = engineData.riders[currentIdx];
+        if (now >= r.timestamps[0] && now <= r.timestamps[r.timestamps.length - 1]) {
+            return currentIdx;
+        }
     }
 
-    async function bootSystem() {
-        engineData = await fetchProjectData();
-        if (!engineData) return;
+    // 2. 如果骑手跑完了，或者刚进入FPV，寻找一个全新的订单
+    // 【核心修复】：寻找新单子时，必须确保【无人机】才刚刚起飞或正在空中！
+    const idx = engineData.drones.findIndex(d => now >= d.timestamps[0] && now < d.timestamps[d.timestamps.length - 1]);
+    return idx !== -1 ? idx : null;
+}
 
-        // 自动解析时间边界
-        const process = (trips) => {
-            trips.forEach(t => t.timestamps.forEach(ts => {
-                if (ts < minTime) minTime = ts; if (ts > maxTime) maxTime = ts;
-            }));
-        };
-        process(engineData.riders || []);
-        process(engineData.drones || []);
+// ====================================================================
+// 系统启动加载
+// ====================================================================
+async function init() {
+    console.log("🚀 ASTRO-NET v2.5 启动...");
+    document.getElementById('loading-text').textContent = "📥 加载高维孪生数据...";
+
+    try {
+        const response = await fetch('./project_data.json');
+        engineData = await response.json();
+
+        try { const odRes = await fetch('./od_matrix.json'); if(odRes.ok) engineData.odMatrix = await odRes.json(); } catch(e){}
+        try { const hotRes = await fetch('./hotspots.json'); if(hotRes.ok) engineData.hotspots = await hotRes.json(); } catch(e){}
+
+        if (engineData.riders) {
+            engineData.riders.forEach(r => {
+                if (r.timestamps) {
+                    minTime = Math.min(minTime, r.timestamps[0]);
+                    maxTime = Math.max(maxTime, r.timestamps[r.timestamps.length - 1]);
+                }
+            });
+        }
+        if (minTime === Infinity) { minTime = 28800; maxTime = 61200; }
         currentTime = minTime;
 
-        // 绑定 UI
-        const slider = document.getElementById('time-slider');
-        slider.min = minTime; slider.max = maxTime;
-        document.getElementById('ui-build-count').innerText = (engineData.buildings || []).length;
-        document.getElementById('ui-rider-count').innerText = (engineData.riders || []).length;
-        document.getElementById('ui-drone-count').innerText = (engineData.drones || []).length;
+        // 初始化主地图
+        deckgl = new deck.DeckGL({
+            container: 'map-container',
+            mapStyle: MAP_STYLE,
+            initialViewState: currentViewState,
+            controller: true,
+            layers: []
+        });
 
-        slider.addEventListener('input', (e) => { currentTime = Number(e.target.value); updateLayers(); });
-        document.getElementById('play-pause-btn').onclick = () => {
-            isPlaying = !isPlaying;
-            document.getElementById('play-icon').className = isPlaying ? 'pause-icon' : 'play-icon';
-        };
+        initUI();
 
-        animate();
+        setTimeout(() => { document.getElementById('loading-overlay').style.display = 'none'; }, 500);
+
+        // 启动唯一动画循环
+        requestAnimationFrame(animationLoop);
+    } catch (e) {
+        console.error("加载数据失败:", e);
+        document.getElementById('loading-text').textContent = "⚠️ 加载失败，请检查本地服务";
+    }
+}
+
+function initUI() {
+    document.getElementById('ui-build-count').textContent = (engineData.buildings || []).length;
+    document.getElementById('ui-rider-count').textContent = (engineData.riders || []).length;
+    document.getElementById('ui-drone-count').textContent = (engineData.drones || []).length;
+
+    // 播放/暂停控制修复
+    const playBtn = document.getElementById('play-pause-btn');
+    playBtn.addEventListener('click', () => {
+        isPlaying = !isPlaying;
+        const icon = document.getElementById('play-icon');
+        icon.className = isPlaying ? 'pause-icon' : 'play-icon';
+    });
+
+    const slider = document.getElementById('time-slider');
+    slider.min = minTime; slider.max = maxTime; slider.value = currentTime;
+    slider.addEventListener('input', (e) => { currentTime = parseInt(e.target.value); });
+}
+
+// 支持自定义变速
+function setSpeed(speed) {
+    animationSpeed = speed;
+    const btns = document.querySelectorAll('.speed-btn');
+    btns.forEach(btn => btn.classList.remove('active'));
+    event.target.classList.add('active');
+}
+
+// 视角平滑动画切换
+function switchView(viewName) {
+    if (!deckgl || isFpvMode) return;
+    const btns = document.querySelectorAll('.view-controls .view-btn');
+    btns.forEach(btn => btn.classList.remove('active'));
+
+    // 安全地更新 DOM
+    const activeBtn = document.getElementById(`btn-${viewName}`);
+    if (activeBtn) activeBtn.classList.add('active');
+
+    currentViewState = {
+        ...VIEWS[viewName],
+        transitionDuration: 2000,
+        transitionInterpolator: new deck.FlyToInterpolator()
+    };
+    deckgl.setProps({ initialViewState: currentViewState });
+}
+
+// 图层开关
+function toggleLayer(layerName) {
+    const checkbox = document.getElementById(`${layerName}-checkbox`);
+    if (checkbox) {
+        checkbox.classList.toggle('checked');
+        activeLayers[layerName] = checkbox.classList.contains('checked');
+    }
+}
+function updateHeatmapOpacity(value) { heatmapOpacity = value / 100; document.getElementById('heatmap-value').textContent = `${value}%`; }
+function updateODThreshold(value) { odThreshold = parseInt(value); document.getElementById('od-value').textContent = `≥${value}单`; }
+
+// ====================================================================
+// 主视图渲染引擎
+// ====================================================================
+function updateMainLayers() {
+    if (!engineData || !deckgl) return;
+    const layers = [];
+
+    if (activeLayers.heatmap && engineData.hotspots && engineData.hotspots.length > 0) {
+        layers.push(new deck.HexagonLayer({
+            id: 'hotspot-layer', data: engineData.hotspots, getPosition: d => d.position,
+            getColorWeight: d => d.intensity || 1, radius: 200, extruded: true, elevationScale: 30,
+            colorRange: [[255, 255, 178], [254, 217, 118], [254, 178, 76], [253, 141, 60], [240, 59, 32], [189, 0, 38]],
+            opacity: heatmapOpacity
+        }));
     }
 
-    bootSystem();
+    if (activeLayers.od && engineData.odMatrix && engineData.odMatrix.length > 0) {
+        const filteredOD = engineData.odMatrix.filter(od => (od.count || 0) >= odThreshold);
+        if (filteredOD.length > 0) {
+            const maxCount = Math.max(...filteredOD.map(od => od.count || 1));
+            layers.push(new deck.ArcLayer({
+                id: 'od-layer', data: filteredOD,
+                getSourcePosition: d => d.source, getTargetPosition: d => d.target,
+                getSourceColor: [0, 150, 255, 180], getTargetColor: [255, 100, 0, 180],
+                getWidth: d => 1 + ((d.count || 1) / maxCount) * 5, getHeight: d => ((d.count || 1) / maxCount) * 0.2
+            }));
+        }
+    }
+
+    if (activeLayers.buildings && engineData.buildings && engineData.buildings.length > 0) {
+        layers.push(new deck.PolygonLayer({
+            id: 'building-layer', data: engineData.buildings, extruded: true, wireframe: true,
+            getPolygon: d => d.polygon, getElevation: d => d.height || 20,
+            getFillColor: [20, 30, 50, 180], getLineColor: [40, 60, 90, 180], lineWidthMinPixels: 0.5
+        }));
+    }
+
+    if (engineData.riders) {
+        layers.push(new deck.TripsLayer({
+            id: 'rider-layer', data: engineData.riders, getPath: d => d.path, getTimestamps: d => d.timestamps,
+            getColor: [255, 102, 0, 180], opacity: 0.6, widthMinPixels: 2, trailLength: 200, currentTime
+        }));
+    }
+
+    if (engineData.drones) {
+        layers.push(new deck.TripsLayer({
+            id: 'drone-layer', data: engineData.drones, getPath: d => d.path, getTimestamps: d => d.timestamps,
+            getColor: [0, 255, 255, 200], opacity: 0.8, widthMinPixels: 3, trailLength: 300, currentTime
+        }));
+    }
+
+    deckgl.setProps({ layers });
+
+    // 更新面板统计
+    let activeRiders = 0, activeDrones = 0;
+    (engineData.riders || []).forEach(r => { if (currentTime >= r.timestamps[0] && currentTime <= r.timestamps[r.timestamps.length - 1]) activeRiders++; });
+    (engineData.drones || []).forEach(d => { if (currentTime >= d.timestamps[0] && currentTime <= d.timestamps[d.timestamps.length - 1]) activeDrones++; });
+
+    document.getElementById('stat-active').textContent = activeRiders + activeDrones;
+    document.getElementById('stat-timesave').textContent = (activeDrones * 0.3).toFixed(1);
+    document.getElementById('stat-saturation').textContent = Math.round(((activeRiders + activeDrones) / Math.max(engineData.riders.length, 1)) * 100) + "%";
+    document.getElementById('stat-avgspeed').textContent = activeDrones > 0 ? 45 : 35;
+}
+
+// ====================================================================
+// 第三人称同订单对比视窗
+// ====================================================================
+// 第三人称同订单对比视窗
+function enterFpvMode() {
+    if (!engineData || !engineData.riders) return;
+    isFpvMode = true;
+    document.getElementById('fpv-overlay').style.display = 'block';
+
+    document.querySelectorAll('.view-controls .view-btn').forEach(btn => btn.classList.remove('active'));
+    const fpvBtn = document.getElementById('btn-fpv');
+    if(fpvBtn) fpvBtn.classList.add('active');
+
+    // 【核心修复】：初始化时，pitch 不能超过 60，否则底图会断层
+    if (!riderDeck) { riderDeck = new deck.DeckGL({ container: 'rider-viewport', mapStyle: MAP_STYLE, initialViewState: { ...VIEWS.micro, pitch: 58 }, controller: {scrollZoom: true, dragPan: true, dragRotate: true}, layers: [] }); }
+    if (!droneDeck) { droneDeck = new deck.DeckGL({ container: 'drone-viewport', mapStyle: MAP_STYLE, initialViewState: { ...VIEWS.micro, pitch: 60 }, controller: {scrollZoom: true, dragPan: true, dragRotate: true}, layers: [] }); }
+
+    currentFpvIndex = getActiveOrderIndex(currentTime, null) || 0;
+}
+
+function exitFpvMode() {
+    isFpvMode = false;
+    document.getElementById('fpv-overlay').style.display = 'none';
+
+    document.querySelectorAll('.view-controls .view-btn').forEach(btn => btn.classList.remove('active'));
+    const macroBtn = document.getElementById('btn-macro');
+    if(macroBtn) macroBtn.classList.add('active');
+
+    if (riderDeck) { riderDeck.finalize(); riderDeck = null; }
+    if (droneDeck) { droneDeck.finalize(); droneDeck = null; }
+
+    deckgl.setProps({ initialViewState: VIEWS.macro });
+}
+
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && isFpvMode) exitFpvMode(); });
+
+function updateFpvLayers() {
+    if (!isFpvMode || !riderDeck || !droneDeck || !engineData) return;
+
+    // 1. 同步锁定同一个订单索引
+    currentFpvIndex = getActiveOrderIndex(currentTime, currentFpvIndex) || 0;
+    const activeRider = engineData.riders[currentFpvIndex];
+    const activeDrone = engineData.drones[currentFpvIndex];
+
+    if (!activeRider || !activeDrone) return;
+
+    // 2. 算当前时刻头部坐标
+    const riderHeadPos = getEntityCurrentHeadPosition(activeRider.path, activeRider.timestamps, currentTime);
+    const droneHeadPos = getEntityCurrentHeadPosition(activeDrone.path, activeDrone.timestamps, currentTime);
+
+    // 算未来时刻坐标用于确定朝向
+    const riderNextPos = getEntityCurrentHeadPosition(activeRider.path, activeRider.timestamps, currentTime + 5);
+    const droneNextPos = getEntityCurrentHeadPosition(activeDrone.path, activeDrone.timestamps, currentTime + 5);
+
+    const riderArrived = currentTime >= activeRider.timestamps[activeRider.timestamps.length - 1];
+    const droneArrived = currentTime >= activeDrone.timestamps[activeDrone.timestamps.length - 1];
+
+    document.getElementById('rider-status').innerText = `🚴 骑手视角 (订单#${currentFpvIndex}) - ${riderArrived ? '已送达！' : '配送绕路中...'}`;
+    document.getElementById('drone-status').innerText = `🚁 无人机视角 (订单#${currentFpvIndex}) - ${droneArrived ? (riderArrived ? '完美完成' : '已极速送达，原地等待骑手...') : '降维直线飞行中...'}`;
+
+    // 如果没到站且位置移动了，则更新方向角；如果是原地等待，则保持最后的方向角，避免镜头乱甩
+    if (!riderArrived && riderHeadPos && riderNextPos && (riderHeadPos[0] !== riderNextPos[0] || riderHeadPos[1] !== riderNextPos[1])) {
+        lastRiderBearing = calculateBearing(riderHeadPos[0], riderHeadPos[1], riderNextPos[0], riderNextPos[1]);
+    }
+    if (!droneArrived && droneHeadPos && droneNextPos && (droneHeadPos[0] !== droneNextPos[0] || droneHeadPos[1] !== droneNextPos[1])) {
+        lastDroneBearing = calculateBearing(droneHeadPos[0], droneHeadPos[1], droneNextPos[0], droneNextPos[1]);
+    }
+
+    if (riderHeadPos) {
+        riderDeck.setProps({
+            viewState: {
+                longitude: riderHeadPos[0], latitude: riderHeadPos[1],
+                zoom: 16.8, pitch: 58, bearing: lastRiderBearing,
+                transitionDuration: 80, transitionInterpolator: new deck.LinearInterpolator()
+            }
+        });
+    }
+    if (droneHeadPos) {
+        droneDeck.setProps({
+            viewState: {
+                longitude: droneHeadPos[0], latitude: droneHeadPos[1],
+                zoom: 16.8, pitch: 60, bearing: lastDroneBearing,
+                transitionDuration: 80, transitionInterpolator: new deck.LinearInterpolator()
+            }
+        });
+    }
+
+    // 6. 分别装载双端图层 (为双端生成独立 ID 的白模图层)
+    const getBaseBuildingLayer = (targetId) => new deck.PolygonLayer({
+        id: `bg-buildings-${targetId}`, // 动态分配独立 ID
+        data: engineData.buildings || [], extruded: true, wireframe: true,
+        getPolygon: d => d.polygon, getElevation: d => d.height,
+        getFillColor: [15, 25, 45, 200], getLineColor: [40, 70, 110, 180]
+    });
+
+    riderDeck.setProps({
+        layers: [
+            getBaseBuildingLayer('rider'), // 左侧骑手专属白模
+            new deck.TripsLayer({
+                id: 'rider-trip-focus', data: [activeRider], getPath: d => d.path, getTimestamps: d => d.timestamps,
+                getColor: [255, 102, 0], opacity: 1, widthMinPixels: 6, trailLength: 300, currentTime
+            }),
+            riderHeadPos && new deck.ScatterplotLayer({
+                id: 'rider-head', data: [{pos: riderHeadPos}], getPosition: d => d.pos,
+                getFillColor: [255, 102, 0, 255], getRadius: 8, radiusUnits: 'pixels',
+                stroked: true, getLineColor: [255, 255, 255, 255], getLineWidth: 2
+            })
+        ].filter(Boolean)
+    });
+
+    droneDeck.setProps({
+        layers: [
+            getBaseBuildingLayer('drone'), // 右侧无人机专属白模
+            new deck.TripsLayer({
+                id: 'drone-trip-focus', data: [activeDrone], getPath: d => d.path, getTimestamps: d => d.timestamps,
+                getColor: [0, 255, 255], opacity: 1, widthMinPixels: 6, trailLength: 300, currentTime
+            }),
+            droneHeadPos && new deck.ScatterplotLayer({
+                id: 'drone-head', data: [{pos: droneHeadPos}], getPosition: d => d.pos,
+                getFillColor: [0, 255, 255, 255], getRadius: 10, radiusUnits: 'pixels',
+                stroked: true, getLineColor: [255, 255, 255, 255], getLineWidth: 2
+            })
+        ].filter(Boolean)
+    });
+}
+
+// ====================================================================
+// 唯一全局动画循环
+// ====================================================================
+function animationLoop() {
+    if (isPlaying && engineData) {
+        currentTime += animationSpeed;
+        if (currentTime > maxTime) currentTime = minTime;
+
+        document.getElementById('time-slider').value = currentTime;
+        document.getElementById('time-display').textContent = formatTime(currentTime);
+        document.getElementById('time-stamp').textContent = formatTime(currentTime);
+
+        if (isFpvMode) {
+            updateFpvLayers();
+        } else {
+            updateMainLayers();
+        }
+    }
+    requestAnimationFrame(animationLoop);
+}
+
+window.addEventListener('DOMContentLoaded', init);
+
 </script>
 </body>
 </html>
