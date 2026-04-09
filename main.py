@@ -14,7 +14,7 @@ from collections import defaultdict
 # ==========================================
 # 1. 全局配置区
 # ==========================================
-CSV_FILE = '深圳市南山区运单抽样_已脱敏.csv'
+CSV_FILE = '深圳市南山区运单抽样_已脱敏.csv'#阿哒哒哒
 OUTPUT_JSON = 'project_data.json'
 OD_MATRIX_FILE = 'od_matrix.json'
 HOTSPOTS_FILE = 'hotspots.json'
