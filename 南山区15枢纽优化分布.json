@@ -1,0 +1,173 @@
+{
+  "district": "南山区",
+  "deployment_phase": "Phase 2: Full Coverage",
+  "core_hub_count": 4,
+  "total_hub_count": 15,
+  "hubs": [
+    {
+      "hub_id": 1,
+      "hub_name": "西丽3号母港 (北核心)",
+      "coordinates": {
+        "lng": 113.974875,
+        "lat": 22.58325
+      },
+      "type": "CORE",
+      "role": "Main Logistics Hub",
+      "influence_radius_km": 10
+    },
+    {
+      "hub_id": 2,
+      "hub_name": "前海母港 (西核心)",
+      "coordinates": {
+        "lng": 113.917125,
+        "lat": 22.54275
+      },
+      "type": "CORE",
+      "role": "Main Logistics Hub",
+      "influence_radius_km": 10
+    },
+    {
+      "hub_id": 3,
+      "hub_name": "后海母港 (东核心)",
+      "coordinates": {
+        "lng": 113.943375,
+        "lat": 22.51125
+      },
+      "type": "CORE",
+      "role": "Main Logistics Hub",
+      "influence_radius_km": 10
+    },
+    {
+      "hub_id": 4,
+      "hub_name": "蛇口母港 (南核心)",
+      "coordinates": {
+        "lng": 113.927625,
+        "lat": 22.48425
+      },
+      "type": "CORE",
+      "role": "Main Logistics Hub",
+      "influence_radius_km": 10
+    },
+    {
+      "hub_id": 5,
+      "hub_name": "留仙洞站",
+      "coordinates": {
+        "lng": 113.926,
+        "lat": 22.567
+      },
+      "type": "SECONDARY",
+      "role": "Rider Intercept Station",
+      "influence_radius_km": 2
+    },
+    {
+      "hub_id": 6,
+      "hub_name": "大学城站",
+      "coordinates": {
+        "lng": 113.964375,
+        "lat": 22.59275
+      },
+      "type": "SECONDARY",
+      "role": "Rider Intercept Station",
+      "influence_radius_km": 2
+    },
+    {
+      "hub_id": 7,
+      "hub_name": "塘朗枢纽",
+      "coordinates": {
+        "lng": 113.988,
+        "lat": 22.61
+      },
+      "type": "SECONDARY",
+      "role": "Rider Intercept Station",
+      "influence_radius_km": 2
+    },
+    {
+      "hub_id": 8,
+      "hub_name": "华侨城站",
+      "coordinates": {
+        "lng": 113.981,
+        "lat": 22.536
+      },
+      "type": "SECONDARY",
+      "role": "Rider Intercept Station",
+      "influence_radius_km": 2
+    },
+    {
+      "hub_id": 9,
+      "hub_name": "科技园北站",
+      "coordinates": {
+        "lng": 113.9486,
+        "lat": 22.5558
+      },
+      "type": "SECONDARY",
+      "role": "Rider Intercept Station",
+      "influence_radius_km": 2
+    },
+    {
+      "hub_id": 10,
+      "hub_name": "南头青青世界",
+      "coordinates": {
+        "lng": 113.901375,
+        "lat": 22.51125
+      },
+      "type": "SECONDARY",
+      "role": "Rider Intercept Station",
+      "influence_radius_km": 2
+    },
+    {
+      "hub_id": 11,
+      "hub_name": "南油西站",
+      "coordinates": {
+        "lng": 113.918,
+        "lat": 22.507
+      },
+      "type": "SECONDARY",
+      "role": "Rider Intercept Station",
+      "influence_radius_km": 2
+    },
+    {
+      "hub_id": 12,
+      "hub_name": "大新站",
+      "coordinates": {
+        "lng": 113.917125,
+        "lat": 22.53375
+      },
+      "type": "SECONDARY",
+      "role": "Rider Intercept Station",
+      "influence_radius_km": 2
+    },
+    {
+      "hub_id": 13,
+      "hub_name": "赤湾站",
+      "coordinates": {
+        "lng": 113.899,
+        "lat": 22.477
+      },
+      "type": "SECONDARY",
+      "role": "Rider Intercept Station",
+      "influence_radius_km": 2
+    },
+    {
+      "hub_id": 14,
+      "hub_name": "深圳湾口岸站",
+      "coordinates": {
+        "lng": 113.955,
+        "lat": 22.505
+      },
+      "type": "SECONDARY",
+      "role": "Rider Intercept Station",
+      "influence_radius_km": 2
+    },
+    {
+      "hub_id": 15,
+      "hub_name": "月亮湾站",
+      "coordinates": {
+        "lng": 113.9082,
+        "lat": 22.4929
+      },
+      "type": "SECONDARY",
+      "role": "Rider Intercept Station",
+      "influence_radius_km": 2
+    }
+  ]
+}
