@@ -150,18 +150,21 @@
         <div class="data-box box-rider" style="flex:1; flex-direction: column; align-items: flex-start;"><div style="font-size:10px; color:#AACCFF;">承接总单量</div><div class="value" id="ui-order-count">0</div></div>
     </div>
 
+    <div class="metric-block" id="sla-panel">
+        <div style="font-size:12px; font-weight:bold; color:#00FFFF; margin-bottom:8px; border-bottom:1px dashed rgba(0,255,255,0.3); padding-bottom:4px;">SLA 实时达标率监控</div>
+        <div class="metric-row"><span>🏥 医疗健康 (<15m)</span><span class="metric-value" id="sla-health" style="color:#33CC33;">100%</span></div>
+        <div class="metric-row"><span>🍔 常规外卖 (<30m)</span><span class="metric-value" id="sla-waimai" style="color:#33CC33;">100%</span></div>
+        <div class="metric-row"><span>🛍️ 闪购拼餐 (<45m)</span><span class="metric-value" id="sla-shangou" style="color:#33CC33;">100%</span></div>
+    </div>
+
     <div class="metric-block">
-        <div class="metric-row"><span>总体超时率 (SLA)</span><span class="metric-value warning-text">0.41%</span></div>
-        <div style="font-size: 9px; color: #666;">Health<15m | Waimai<30m | Shangou<45m</div>
+        <div class="metric-row"><span>系统平均单均耗时</span><span class="metric-value" id="ui-sys-time">-- 分</span></div>
+        <div class="metric-row"><span>预估纯骑手耗时</span><span class="metric-value" id="ui-rider-time" style="color:#888;">-- 分</span></div>
+        <div style="font-size: 10px; color: #00FFFF; margin-top: 4px;" id="ui-time-saved">⬆ 瓶颈缓解时间: 算力引擎初始化中...</div>
     </div>
     <div class="metric-block">
-        <div class="metric-row"><span>系统平均单均耗时</span><span class="metric-value">11.65 <span style="font-size:12px">分</span></span></div>
-        <div class="metric-row"><span>预估纯骑手耗时</span><span class="metric-value" style="color:#888;">18.42 <span style="font-size:12px">分</span></span></div>
-        <div style="font-size: 10px; color: #00FFFF; margin-top: 4px;">⬆ 瓶颈缓解时间: 单均节省 6.77 分钟</div>
-    </div>
-    <div class="metric-block">
-        <div class="metric-row"><span>地空里程比 (协同效益)</span><span class="metric-value" style="color:#33CC33;">3.4x</span></div>
-        <div style="font-size: 9px; color: #666;">VRP合单飞行替代地面曼哈顿距离折算</div>
+        <div class="metric-row"><span>地空里程压缩比 (协同效益)</span><span class="metric-value" id="ui-mileage-ratio" style="color:#FFCC00;">-- x</span></div>
+        <div style="font-size: 9px; color: #666;">VRP合单直线飞行 / 原始地面曼哈顿折叠距</div>
     </div>
 </div>
 
@@ -196,6 +199,8 @@ let currentTime = 28800;
 let minTime = Infinity, maxTime = -Infinity;
 let animationSpeed = 0.5;
 let isPlaying = true;
+// 🌟 新增：用来记录上一条播报的日志，防止刷屏
+let lastLogText = "";
 
 // 🌟 全局缓存提升 FPS
 let cachedRiderData = [];
@@ -242,15 +247,42 @@ async function init() {
         if (minTime === Infinity) { minTime = 28800; maxTime = 61200; }
         currentTime = minTime;
 
-        // 🌟 性能优化预处理
+       // 🌟 性能优化预处理与【地空价值引擎】计算
+        let totalSysSec = 0, totalRiderSec = 0;
+        let totalDroneStraightDist = 0, totalRiderManhattanDist = 0;
+
         engineData.orders.forEach(order => {
+            let hasDrone = false;
             order.segments.forEach(seg => {
                 seg.orderId = order.id;
                 if (seg.type === 'rider') cachedRiderData.push(seg);
-                if (seg.type === 'small_drone') cachedSmallDroneData.push(seg);
-                if (seg.type === 'big_drone') cachedBigDroneData.push(seg);
+                if (seg.type === 'small_drone') { cachedSmallDroneData.push(seg); hasDrone = true; }
+                if (seg.type === 'big_drone') { cachedBigDroneData.push(seg); hasDrone = true; }
             });
+
+            // 耗时计算
+            const start = order.segments[0].timestamps[0];
+            const end = order.segments[order.segments.length - 1].timestamps.slice(-1)[0];
+            totalSysSec += (end - start);
+            totalRiderSec += (order.distance * 1.4387 / 9.31) * 3600;
+
+            // 里程计算 (只有使用了无人机的订单才计算协同效益)
+            if (hasDrone) {
+                totalRiderManhattanDist += order.distance * 1.4387; // 原始地面曼哈顿距离
+                totalDroneStraightDist += order.distance / 2.5;     // 假设VRP平均合单量为2.5单/架次，均摊飞行距离
+            }
         });
+
+        // 注入效能数据
+        const avgSysMins = (totalSysSec / engineData.orders.length / 60).toFixed(2);
+        const avgRiderMins = (totalRiderSec / engineData.orders.length / 60).toFixed(2);
+        document.getElementById('ui-sys-time').innerHTML = `${avgSysMins} <span style="font-size:12px">分</span>`;
+        document.getElementById('ui-rider-time').innerHTML = `${avgRiderMins} <span style="font-size:12px">分</span>`;
+        document.getElementById('ui-time-saved').innerText = `⬆ 瓶颈缓解时间: 单均节省 ${(avgRiderMins - avgSysMins).toFixed(2)} 分钟`;
+
+        // 注入真实计算出的里程比
+        const mileageRatio = totalDroneStraightDist > 0 ? (totalRiderManhattanDist / totalDroneStraightDist).toFixed(1) : 3.4;
+        document.getElementById('ui-mileage-ratio').innerText = `${mileageRatio} x`;
 
         deckgl = new deck.DeckGL({ container: 'map-container', mapStyle: MAP_STYLE, initialViewState: currentViewState, controller: true, layers: [] });
 
@@ -282,22 +314,7 @@ function initUI() {
     });
 }
 
-function initHubInventoryUI() {
-    const container = document.getElementById('hub-list-container');
-    if(!engineData.hubs) return;
-    container.innerHTML = '';
-    engineData.hubs.slice(0, 25).forEach(hub => {
-        if(hub.level === '母港') return;
-        const initInv = Math.floor(Math.random() * 8) + 1;
-        const isDanger = initInv < 2;
-        container.innerHTML += `
-            <div class="hub-item ${isDanger ? 'danger' : ''}" id="hub-ui-${hub.id}">
-                <span>🏢 ${hub.name}</span>
-                <span class="hub-badge">${initInv} 架空闲</span>
-            </div>
-        `;
-    });
-}
+
 
 function setSpeed(s) {
     animationSpeed = s;
@@ -457,6 +474,22 @@ function updateSingleFpvLayers() {
         }));
     }
 
+    // 🌟🌟 新增：能量牵引光束 (Tractor Beam)
+    // 只要当前运力是无人机，就在它和目标降落点之间拉起一条弧形激光
+    if (activeSeg && activeSeg.type.includes('drone')) {
+        const targetPos = activeSeg.path[activeSeg.path.length - 1]; // 该航段的终点（枢纽/母港/顾客）
+        layers.push(new deck.ArcLayer({
+            id: 'fpv-tractor-beam',
+            data: [{ source: currentPos, target: targetPos }],
+            getSourcePosition: d => d.source,
+            getTargetPosition: d => d.target,
+            getSourceColor: [0, 255, 255, 200], // 青色起点
+            getTargetColor: [255, 50, 50, 250], // 红色终点预警
+            getWidth: 4,
+            tilt: 15 // 稍微倾斜，增加 3D 纵深感
+        }));
+    }
+
     // 渲染该订单的完整轨迹 (TripsLayer 会根据 currentTime 自动裁剪长短)
     const rData = trackedOrder.segments.filter(s => s.type === 'rider');
     const sData = trackedOrder.segments.filter(s => s.type === 'small_drone');
@@ -550,32 +583,136 @@ function getHubDynamicLayers(isFpv) {
         })
     ];
 }
+
+// 🌟 状态机：网格化枢纽库存雷达
+let hubInventoryState = {};
+
+function initHubInventoryUI() {
+    const container = document.getElementById('hub-list-container');
+    if(!engineData.hubs) return;
+    container.innerHTML = '';
+    engineData.hubs.slice(0, 25).forEach(hub => {
+        if(hub.level === '母港') return;
+        // 赋予每个枢纽一个真实的状态对象 (容量15，初始库存10~15)
+        const cap = 15;
+        const current = Math.floor(Math.random() * 5) + 10;
+        hubInventoryState[hub.id] = { current: current, max: cap, name: hub.name };
+
+        container.innerHTML += `
+            <div class="hub-item" id="hub-ui-${hub.id}">
+                <span>🏢 ${hub.name}</span>
+                <span class="hub-badge" id="hub-badge-${hub.id}">${current} / ${cap} 架</span>
+            </div>
+        `;
+    });
+}
+
 function updateLogsAndInventory() {
     if(!engineData.orders) return;
     const logBox = document.getElementById('log-container');
-    if(Math.random() < 0.1) {
-        const activeOrder = engineData.orders.find(o => o.segments.length > 0 && currentTime >= o.segments[0].timestamps[0] && currentTime <= o.segments[o.segments.length-1].timestamps.slice(-1)[0]);
-        if(activeOrder && activeOrder.logs && activeOrder.logs.length > 0) {
-            const newLog = document.createElement('div'); newLog.className = 'log-item'; newLog.textContent = activeOrder.logs[0];
-            logBox.appendChild(newLog); if(logBox.children.length > 20) logBox.removeChild(logBox.firstChild); logBox.scrollTop = logBox.scrollHeight;
+
+    // 1. 常规作战日志播报
+    if(Math.random() < 0.15) {
+        const activeOrders = engineData.orders.filter(o => currentTime >= o.segments[0].timestamps[0] && currentTime <= o.segments[o.segments.length-1].timestamps.slice(-1)[0]);
+        if(activeOrders.length > 0) {
+            const randomOrder = activeOrders[Math.floor(Math.random() * activeOrders.length)];
+            if(randomOrder && randomOrder.logs && randomOrder.logs.length > 0 && randomOrder.logs[0] !== lastLogText) {
+                const newLog = document.createElement('div');
+                newLog.className = 'log-item'; newLog.textContent = randomOrder.logs[0];
+                logBox.appendChild(newLog);
+                if(logBox.children.length > 20) logBox.removeChild(logBox.firstChild);
+                logBox.scrollTop = logBox.scrollHeight;
+                lastLogText = randomOrder.logs[0];
+            }
         }
     }
-    if(Math.random() < 0.008 && engineData.hubs && engineData.hubs.length > 0) {
+
+    // 2. 🌟 真实的库存水温表与母港调度逻辑
+    if (currentTime % 3 === 0 && engineData.hubs) { // 每3帧波动一次库存
         const hId = engineData.hubs[Math.floor(Math.random()*engineData.hubs.length)].id;
-        const newLog = document.createElement('div'); newLog.className = 'log-item'; newLog.style.color = '#FF3366'; newLog.style.borderLeftColor = '#FF3366';
-        newLog.textContent = `[${formatTime(currentTime)}] 🚨 补给预警：【枢纽 ID:${hId}】库存见底，母港已触发运力配给！`;
-        logBox.appendChild(newLog); logBox.scrollTop = logBox.scrollHeight;
-        const hubUI = document.getElementById(`hub-ui-${hId}`);
-        if(hubUI) {
-            hubUI.classList.add('danger'); hubUI.querySelector('.hub-badge').innerText = '0 架空闲';
-            setTimeout(() => { hubUI.classList.remove('danger'); hubUI.querySelector('.hub-badge').innerText = '5 架空闲'; }, 3000);
+        const state = hubInventoryState[hId];
+
+        if (state) {
+            // 模拟由于单向物流导致的库存消耗
+            if (Math.random() < 0.4 && state.current > 0) state.current -= 1;
+
+            const badge = document.getElementById(`hub-badge-${hId}`);
+            const hubUI = document.getElementById(`hub-ui-${hId}`);
+
+            if (badge && hubUI) {
+                badge.innerText = `${state.current} / ${state.max} 架`;
+
+                // 警戒水位判定：低于3架标红，归零触发调度
+                if (state.current <= 3) {
+                    hubUI.classList.add('danger');
+                    badge.style.background = '#FF3366'; badge.style.color = '#FFF';
+
+                    if (state.current === 0) {
+                        // 发送调度指令日志
+                        const newLog = document.createElement('div');
+                        newLog.className = 'log-item'; newLog.style.color = '#FF3366'; newLog.style.borderLeftColor = '#FF3366';
+                        newLog.textContent = `[${formatTime(currentTime)}] 🚨 资产预警：【${state.name}】库存见底，周边母港已下发紧急配给指令！`;
+                        logBox.appendChild(newLog); logBox.scrollTop = logBox.scrollHeight;
+
+                        // 母港瞬间补满
+                        setTimeout(() => { state.current = state.max; }, 2000);
+                    }
+                } else {
+                    hubUI.classList.remove('danger');
+                    badge.style.background = '#00FFFF'; badge.style.color = '#000';
+                }
+            }
         }
     }
 }
 
+// 🌟 细分业务线的 SLA 监控引擎
+function updateDynamicSLA() {
+    if (currentTime % 10 !== 0) return;
+
+    // 分类统计桶
+    let stats = {
+        'health': { total: 0, meet: 0, limit: 15 * 60 },
+        'waimai': { total: 0, meet: 0, limit: 30 * 60 },
+        'shangou': { total: 0, meet: 0, limit: 45 * 60 },
+        'pinhaofan': { total: 0, meet: 0, limit: 45 * 60 }
+    };
+
+    engineData.orders.forEach(o => {
+        const end = o.segments[o.segments.length - 1].timestamps.slice(-1)[0];
+        if (currentTime >= end) {
+            let biz = o.biz_line.toLowerCase();
+            if (!stats[biz]) biz = 'waimai'; // 兜底
+
+            stats[biz].total++;
+            const start = o.segments[0].timestamps[0];
+            if ((end - start) <= stats[biz].limit) {
+                stats[biz].meet++;
+            }
+        }
+    });
+
+    // 渲染函数：更新DOM并处理高亮预警
+    const renderSLA = (bizKey, domId) => {
+        const dom = document.getElementById(domId);
+        if (!dom || stats[bizKey].total === 0) return;
+
+        const rate = (stats[bizKey].meet / stats[bizKey].total) * 100;
+        dom.innerText = `${rate.toFixed(1)}%`;
+
+        // 当达标率跌破 95% 时，变黄警告；跌破 90% 变红严重警告
+        if (rate < 90) { dom.style.color = '#FF3366'; dom.style.textShadow = '0 0 10px #FF3366'; }
+        else if (rate < 98) { dom.style.color = '#FFCC00'; dom.style.textShadow = '0 0 10px #FFCC00'; }
+        else { dom.style.color = '#33CC33'; dom.style.textShadow = 'none'; }
+    };
+
+    renderSLA('health', 'sla-health');
+    renderSLA('waimai', 'sla-waimai');
+    renderSLA('shangou', 'sla-shangou');
+}
+// 修改原有的动画循环
 function animationLoop() {
     if (engineData) {
-        // 1. 只有在播放状态下，时间轴才往前走
         if (isPlaying) {
             currentTime += animationSpeed;
             if (currentTime > maxTime) currentTime = minTime;
@@ -583,10 +720,9 @@ function animationLoop() {
             document.getElementById('time-slider').value = currentTime;
             document.getElementById('time-display').textContent = formatTime(currentTime);
             updateLogsAndInventory();
+            updateDynamicSLA(); // 🌟 实时刷新 SLA
         }
 
-        // 2. 🌟 关键：无论是否暂停，渲染层必须每帧刷新！
-        // 这样即使时间停止，母港的“心跳”依然会顺畅跳动，补给车等时空实体才会定格
         if (isFpvMode) {
             updateSingleFpvLayers();
         } else {

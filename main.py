@@ -15,7 +15,7 @@ import os
 # ==========================================
 # 1. 全局配置区
 # ==========================================
-CSV_FILE = '深圳市南山区运单抽样_已脱敏.csv'
+CSV_FILE = '深圳市南山区运单抽样_清洗后.csv'
 FILE_HUBS_JSON = '南山区15枢纽优化分布.json'
 OUTPUT_JSON = 'project_data.json'
 OD_MATRIX_FILE = 'od_matrix.json'
@@ -24,7 +24,7 @@ BUILDINGS_CACHE_FILE = 'buildings_cache.json'
 
 ROUTING_ENGINE = 'osrm'
 MAX_THREADS = 20
-SAMPLE_SIZE = 30000
+SAMPLE_SIZE = 84000
 OD_TOP_N = 15
 HOTSPOT_CLUSTER_DISTANCE = 0.003
 
@@ -120,19 +120,36 @@ def generate_od_matrix(df, top_n=OD_TOP_N):
     return sorted(od_list, key=lambda x: x["count"], reverse=True)[:top_n]
 
 
-def generate_hotspots(df, eps=HOTSPOT_CLUSTER_DISTANCE, min_samples=5):
-    points = [[float(r['pickup_longitude']), float(r['pickup_latitude'])] for _, r in df.iterrows() if
-              pd.notna(r['pickup_longitude'])]
-    if not points: return []
+def generate_hotspots(df, eps=HOTSPOT_CLUSTER_DISTANCE, min_samples=5, max_points=10000):
+    points = [[float(r['pickup_longitude']), float(r['pickup_latitude'])]
+              for _, r in df.iterrows() if pd.notna(r['pickup_longitude'])]
+
+    if not points:
+        return []
+
+    # 🌟 核心修复：如果坐标点数量超过阈值，进行均匀随机抽样
+    # 计算热力图只需要具有代表性的分布，不需要拿8万个点去死算
+    if len(points) > max_points:
+        import random
+        random.seed(42)  # 保证每次算出来的热点固定
+        points = random.sample(points, max_points)
+
+    # 执行 DBSCAN 聚类
     clustering = DBSCAN(eps=eps, min_samples=min_samples, metric='haversine').fit(np.radians(np.array(points)))
+
     clusters = defaultdict(list)
     for i, label in enumerate(clustering.labels_):
-        if label != -1: clusters[label].append(points[i])
+        if label != -1:
+            clusters[label].append(points[i])
+
     hotspots = []
     for pts in clusters.values():
         if len(pts) >= 10:
             arr = np.array(pts)
-            hotspots.append({"position": arr.mean(axis=0).tolist(), "intensity": len(pts)})
+            # intensity 稍微按比例放大一下，弥补抽样导致的绝对数量变小
+            weight = int(len(pts) * (len(df) / min(len(df), max_points)))
+            hotspots.append({"position": arr.mean(axis=0).tolist(), "intensity": weight})
+
     return sorted(hotspots, key=lambda x: x["intensity"], reverse=True)
 
 
@@ -285,11 +302,49 @@ def process_single_order(row, planner):
 # 5. 主执行流程
 # ==========================================
 def main():
-    print("📦 正在读取清洗数据...")
-    df = pd.read_csv(CSV_FILE, encoding='utf-8')
-    df = df.dropna(subset=['pickup_longitude', 'dropoff_longitude', 'fetch_time']).sample(n=min(SAMPLE_SIZE, len(df)),
-                                                                                          random_state=42).sort_values(
-        by='fetch_time')
+    print("📦 正在开启低内存模式读取数据...")
+
+    # 1. 明确声明我们只需要的列 (剔除冗余文本列)
+    needed_cols = [
+        'order_seq_id', 'biz_line', 'fetch_time',
+        'pickup_longitude', 'pickup_latitude',
+        'dropoff_longitude', 'dropoff_latitude'
+    ]
+
+    # 2. 声明数据类型，强制降低精度节省内存
+    dtypes = {
+        'pickup_longitude': 'float32',
+        'pickup_latitude': 'float32',
+        'dropoff_longitude': 'float32',
+        'dropoff_latitude': 'float32',
+        'biz_line': 'category'  # 将字符串转为类别类型，能极大压缩重复文本(如waimai, health)的体积
+    }
+
+    # 3. 分块读取与流式抽样 (Chunking)
+    chunk_size = 100000  # 每次只往内存吃10万行
+    sampled_chunks = []
+
+    try:
+        # 使用 iterator=True 和 chunksize 进行流式读取
+        for chunk in pd.read_csv(CSV_FILE, encoding='utf-8', usecols=needed_cols, dtype=dtypes, chunksize=chunk_size):
+            # 在当前小块内进行清洗
+            chunk = chunk.dropna(subset=['pickup_longitude', 'dropoff_longitude', 'fetch_time'])
+
+            # 在当前小块内先进行一次粗抽样 (假设我们最终要8.4万，原始有60万，粗抽20%即可保证余量)
+            # 这样缓存到列表里的数据量极小
+            if len(chunk) > 0:
+                sampled_chunks.append(chunk.sample(frac=0.2, random_state=42))
+
+        # 将所有精简后的小块拼接起来
+        df = pd.concat(sampled_chunks, ignore_index=True)
+
+        # 最后进行精确的 8.4 万单抽样与时间排序
+        df = df.sample(n=min(SAMPLE_SIZE, len(df)), random_state=42).sort_values(by='fetch_time')
+        print(f"✅ 数据加载与抽样完成，当前实际推演单量: {len(df)} 条")
+
+    except Exception as e:
+        print(f"❌ 数据读取失败，请检查列名是否匹配: {e}")
+        return
 
     od_matrix = generate_od_matrix(df)
     hotspots = generate_hotspots(df)
